@@ -1,7 +1,35 @@
+# Secrets — NEVER commit these
 .env
-temp/
+
+# Temporary media files
+temp/*.ogg
+temp/*.mp3
+temp/*.mp4
+temp/*.jpg
+temp/*.jpeg
+temp/*.png
+temp/*.aiff
+temp/*.wav
+
+# Python cache
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environment
 .venv/
-*.mp3
-*.wav
+venv/
+env/
+
+# Log file (contains runtime data, not source code)
+ammahome.log
+
+# macOS system files
+.DS_Store
+
+# IDE files
+.vscode/
+.idea/
+*.swp
