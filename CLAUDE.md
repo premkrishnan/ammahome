@@ -137,4 +137,31 @@ python main.py
 
 ## Current Phase
 
-Phase 1 — Core pipeline: Telegram bot → display server → iPad display
+**Phase 1 — Complete ✅**
+Core pipeline: Telegram bot → display server → iPad display.
+All message types working (photo, video, voice, text + TTS).
+Gallery, mic recording, heartbeat monitoring all implemented.
+
+**Phase 2 — Next**
+Cloud deployment and physical iPad setup at Amma's home.
+
+---
+
+## Known Fixes (Phase 1)
+
+These bugs were hit and fixed during Phase 1. Do not reintroduce them.
+
+### Fix 1 — python-telegram-bot `run_polling()` event loop conflict
+**Symptom:** `RuntimeError: This event loop is already running` on macOS.
+**Cause:** `run_polling()` tries to create its own event loop but one already exists.
+**Fix:** Wrap the entire startup in `asyncio.run()` and use `application.run_polling()` inside an async context. See `main.py` for the correct pattern.
+
+### Fix 2 — `Application __slots__` error
+**Symptom:** `AttributeError: 'Application' object has no attribute 'X'` when trying to attach custom data to the bot application object.
+**Cause:** `python-telegram-bot`'s `Application` class uses `__slots__`, so you cannot set arbitrary attributes on it.
+**Fix:** Use `context.bot_data` (a plain dict available inside all handler callbacks) to store shared state like the WebSocket broadcast function.
+
+### Fix 3 — Safari autoplay blocks TTS and voice audio
+**Symptom:** Audio (TTS, voice messages) does not play on first message after page load. No error visible.
+**Cause:** Safari on iOS refuses `audio.play()` until the user has physically tapped the page at least once.
+**Fix:** On the first `touchstart` or `click` event on `document`, create and resume an `AudioContext`. This unlocks audio for all subsequent `play()` calls. See `display/app.js` — `unlockAudio()` function.
