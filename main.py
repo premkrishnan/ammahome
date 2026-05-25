@@ -133,9 +133,18 @@ def main() -> None:
         asyncio.run(start_all_services())
     except KeyboardInterrupt:
         logger.info("AmmaHome stopped by user (Ctrl+C). Goodbye.")
+    except ExceptionGroup as group:
+        # TaskGroup wraps real errors in an ExceptionGroup — unwrap them
+        logger.error("AmmaHome crashed — details below:")
+        for i, error in enumerate(group.exceptions, 1):
+            logger.error(f"  Error {i}: {type(error).__name__}: {error}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
     except Exception as error:
-        logger.error(f"AmmaHome crashed unexpectedly: {error}")
-        logger.error("Fix: Check ammahome.log for the full error details")
+        logger.error(f"AmmaHome crashed unexpectedly: {type(error).__name__}: {error}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 

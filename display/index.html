@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<!--
+  FILE: display/index.html
+
+  PURPOSE:
+    The full-screen display page shown on Amma's iPad. Four screens:
+
+    Screen 1 — Home (idle): pulsing heart, കുടുംബം, two large
+      gallery buttons (📷 Photos, 🎥 Videos) stacked vertically with
+      inline unread-count badges. Single fixed mic button at bottom.
+
+    Screen 2 — Gallery: 2-column thumbnail grid, newest first.
+      Unread items glow gold. Home button top-left. Tap thumb → fullscreen.
+
+    Screen 3 — Gallery Fullscreen: one photo/video fills screen.
+      Sender name at top. Tap anywhere to go back to gallery.
+
+    Screen 4 — Interrupt: overlays any screen when a new WebSocket
+      message arrives. Media fills top 65%. Bottom 35% is a solid
+      dark bar with sender name, NEW label, and ack prompt.
+
+    Single fixed mic button (#mic-button) is position:fixed but
+    shown ONLY on the home screen — hidden on all other screens.
+
+  INPUTS:
+    - WebSocket messages from display_server.py
+
+  OUTPUTS:
+    - WebSocket messages back to server: ack, heartbeat, voice_reply
+
+  DEPENDENCIES:
+    - display/style.css
+    - display/app.js
+
+  AUTHOR: AmmaHome
+  LAST UPDATED: 2026-05-25 (mic home-only, gradient bg, blue mic, family icon)
+-->
+<html lang="ml">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen">
+  <title>AmmaHome — കുടുംബം എപ്പോഴും അടുത്ത്</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════
+       FADED HEART OVERLAY — fixed behind all screens (z-index 0)
+       Hearts are purely decorative, pointer-events:none
+       ═══════════════════════════════════════════════════════ -->
+  <div class="hearts-bg" aria-hidden="true">
+    <span>♥</span><span>❤</span><span>♥</span><span>❤</span>
+    <span>♥</span><span>❤</span><span>♥</span><span>❤</span>
+    <span>♥</span><span>❤</span><span>♥</span><span>❤</span>
+    <span>♥</span><span>❤</span><span>♥</span><span>❤</span>
+    <span>♥</span><span>❤</span>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       SCREEN 1 — HOME (idle)
+       ═══════════════════════════════════════════════════════ -->
+  <div id="waiting-screen" class="screen active">
+    <div class="waiting-content">
+      <img src="family-icon.png" alt="Family" class="family-icon">
+      <div class="waiting-text">ഒരു കുടുംബം</div>
+      <div class="waiting-subtext">Family is always nearby</div>
+
+      <!-- Gallery navigation — stacked full-width buttons -->
+      <div class="gallery-buttons">
+
+        <!-- Photos button: icon + label + inline badge -->
+        <button class="gallery-btn" id="btn-photos">
+          <span class="btn-icon">📷</span>
+          <span class="btn-label">Photos</span>
+          <span class="badge-inline hidden" id="badge-photos">0</span>
+        </button>
+
+        <!-- Videos button: icon + label + inline badge -->
+        <button class="gallery-btn" id="btn-videos">
+          <span class="btn-icon">🎥</span>
+          <span class="btn-label">Videos</span>
+          <span class="badge-inline hidden" id="badge-videos">0</span>
+        </button>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       SCREEN 2 — GALLERY (thumbnail grid)
+       ═══════════════════════════════════════════════════════ -->
+  <div id="gallery-screen" class="screen">
+
+    <div class="gallery-header">
+      <button id="btn-gallery-home" class="gallery-home-btn" aria-label="Go home">🏠<span class="home-btn-label">HOME</span></button>
+      <span id="gallery-title" class="gallery-title">Photos</span>
+    </div>
+
+    <!-- Thumbnails rendered dynamically by app.js -->
+    <div id="gallery-grid" class="gallery-grid"></div>
+
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       SCREEN 3 — GALLERY FULLSCREEN (one item, tap to go back)
+       ═══════════════════════════════════════════════════════ -->
+  <div id="fullscreen-screen" class="screen">
+
+    <div id="fullscreen-header">
+      <div id="fullscreen-sender" class="fullscreen-sender"></div>
+    </div>
+
+    <div id="fullscreen-media">
+      <img id="fullscreen-img" src="" alt="" class="hidden">
+      <video id="fullscreen-video" autoplay playsinline class="hidden"></video>
+    </div>
+
+    <div id="fullscreen-footer">
+      <div class="tap-hint">ഇവിടെ തൊടുക</div>
+      <div class="tap-hint-en">Tap to go back</div>
+    </div>
+
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       SCREEN 4 — INTERRUPT (new message from family)
+       Top 65%: media — clean, no overlays.
+       Bottom 35%: solid dark bar — sender, NEW label, ack prompt.
+       Tap anywhere on screen → acknowledge and return.
+       ═══════════════════════════════════════════════════════ -->
+  <div id="message-screen" class="screen">
+
+    <!-- Top 65%: photo / video / text — no overlays on this area -->
+    <div id="media-pane">
+
+      <div id="photo-container" class="media-container hidden">
+        <img id="photo-img" src="" alt="Family photo">
+      </div>
+
+      <!-- Bug 4 fix: video element wrapped in a click-stop div
+           so native controls do not bubble up to ack listener -->
+      <div id="video-container" class="media-container hidden">
+        <video id="video-player" autoplay playsinline controls></video>
+      </div>
+
+      <div id="text-container" class="media-container hidden">
+        <div id="text-message" class="text-message"></div>
+      </div>
+
+      <audio id="audio-player" autoplay></audio>
+
+    </div><!-- /#media-pane -->
+
+    <!-- Bottom 35%: solid dark control bar — no transparency -->
+    <div id="control-bar">
+      <div class="interrupt-label">🆕 പുതിയത്</div>
+      <div id="sender-name" class="sender-name"></div>
+      <div class="tap-hint">ഇവിടെ തൊടുക</div>
+      <div class="tap-hint-en">Tap anywhere to acknowledge</div>
+    </div>
+
+  </div><!-- /#message-screen -->
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       FIXED MIC BUTTON — home screen only.
+       position:fixed, but shown/hidden by JS via .mic-hidden class.
+       z-index: 200 ensures it is above all screen elements.
+       ═══════════════════════════════════════════════════════ -->
+  <div id="mic-button">
+    <div class="mic-icon">🎙️</div>
+    <div class="mic-label">Hold to talk</div>
+  </div>
+
+  <!-- Recording indicator — fixed overlay shown while mic is held -->
+  <div id="recording-indicator" class="recording-indicator hidden">
+    <div class="recording-dot"></div>
+    <div class="recording-text">Recording...</div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

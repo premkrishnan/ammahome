@@ -1,0 +1,768 @@
+/* ============================================================
+   FILE: display/style.css
+
+   PURPOSE:
+     Styles for Amma's full-screen iPad display. Four screens:
+     Home, Gallery, Gallery Fullscreen, and Interrupt.
+     Designed for elderly eyes: very large text, warm colours,
+     zero clutter, no small touch targets.
+
+   CHANGES IN THIS VERSION (2026-05-25):
+     Bug 1 — Gallery buttons now stacked vertically, full width,
+              min-height 80px, badge inline inside the button.
+     Bug 3 — Interrupt media-pane 65%, control-bar 35%,
+              solid background (no transparency).
+     Bug 6 — Single #mic-button, position:fixed at bottom centre,
+              120×120px, home screen only (hidden on other screens).
+     UI   — Rich multi-colour animated gradient background on all
+              screens; faded heart overlay; blue mic button;
+              family icon image replaces emoji.
+
+   COLOUR PALETTE:
+     Background:   animated multi-colour gradient (gradientShift)
+     Media pane:   #0a0a1a  (almost black)
+     Gold accent:  #f5a623  (sender names, Malayalam text, badges)
+     Heading gold: #f0a500  (ഒരു കുടുംബം)
+     Soft white:   #f0e6d3  (body text)
+     Muted text:   #c8b8a8  (subtitles, labels — lightened for gradient)
+     Mic blue:     #1565c0 / #42a5f5 (button bg / border)
+
+   FONT SIZES:
+     - Minimum for any text Amma reads: 40px
+     - Gallery button label: 40px
+     - Sender name: 52px+
+     - Waiting screen headline: 80px
+     - Text message: 56px
+
+   LAST UPDATED: 2026-05-25 (gradient bg, blue mic, family icon, mic home-only)
+   ============================================================ */
+
+/* ── Reset & base ─────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: linear-gradient(135deg,
+    #1a1a6e 0%,
+    #2d1b69 15%,
+    #0d4f8b 30%,
+    #1a6e8e 45%,
+    #0d8b6e 60%,
+    #6e1a8e 75%,
+    #1a2d8b 90%,
+    #0f1a4e 100%
+  );
+  background-size: 400% 400%;
+  animation: gradientShift 20s ease infinite;
+  font-family: -apple-system, "Noto Sans Malayalam", "Noto Sans", sans-serif;
+  color: #f0e6d3;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@keyframes gradientShift {
+  0%   { background-position: 0% 50%;   }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%;   }
+}
+
+/* ── Faded heart overlay — behind all content ─────────────────
+   A fixed pseudo-layer of Unicode hearts scattered across the
+   full viewport. z-index: 0 keeps them under every screen.
+   ─────────────────────────────────────────────────────────── */
+
+.hearts-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.hearts-bg span {
+  position: absolute;
+  color: #ffffff;
+  line-height: 1;
+  user-select: none;
+}
+
+/* 18 hearts — varied sizes, opacities, positions */
+.hearts-bg span:nth-child(1)  { font-size: 72px; opacity: 0.07; top:  4%; left:  7%; }
+.hearts-bg span:nth-child(2)  { font-size: 28px; opacity: 0.10; top:  9%; left: 38%; }
+.hearts-bg span:nth-child(3)  { font-size: 48px; opacity: 0.06; top:  3%; left: 71%; }
+.hearts-bg span:nth-child(4)  { font-size: 22px; opacity: 0.11; top: 14%; left: 88%; }
+.hearts-bg span:nth-child(5)  { font-size: 60px; opacity: 0.08; top: 22%; left: 18%; }
+.hearts-bg span:nth-child(6)  { font-size: 34px; opacity: 0.09; top: 28%; left: 57%; }
+.hearts-bg span:nth-child(7)  { font-size: 20px; opacity: 0.12; top: 35%; left: 82%; }
+.hearts-bg span:nth-child(8)  { font-size: 56px; opacity: 0.07; top: 43%; left:  3%; }
+.hearts-bg span:nth-child(9)  { font-size: 26px; opacity: 0.10; top: 47%; left: 44%; }
+.hearts-bg span:nth-child(10) { font-size: 44px; opacity: 0.06; top: 52%; left: 68%; }
+.hearts-bg span:nth-child(11) { font-size: 32px; opacity: 0.09; top: 58%; left: 29%; }
+.hearts-bg span:nth-child(12) { font-size: 80px; opacity: 0.06; top: 63%; left: 76%; }
+.hearts-bg span:nth-child(13) { font-size: 24px; opacity: 0.11; top: 69%; left: 12%; }
+.hearts-bg span:nth-child(14) { font-size: 50px; opacity: 0.08; top: 74%; left: 50%; }
+.hearts-bg span:nth-child(15) { font-size: 36px; opacity: 0.07; top: 80%; left: 33%; }
+.hearts-bg span:nth-child(16) { font-size: 28px; opacity: 0.10; top: 85%; left: 63%; }
+.hearts-bg span:nth-child(17) { font-size: 64px; opacity: 0.06; top: 89%; left:  2%; }
+.hearts-bg span:nth-child(18) { font-size: 22px; opacity: 0.12; top: 93%; left: 85%; }
+
+/* ── Shared screen base ───────────────────────────────────── */
+
+.screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+  /* Screens are transparent so the body gradient shows through */
+  background: transparent;
+  z-index: 1;
+}
+
+.screen.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Shared tap-hint text (interrupt bar + fullscreen footer) */
+.tap-hint {
+  font-size: 40px;
+  color: #f5a623;
+  font-weight: 600;
+  animation: fade-pulse 3s ease-in-out infinite;
+}
+
+.tap-hint-en {
+  font-size: 26px;
+  color: #7a6e80;
+  animation: fade-pulse 3s ease-in-out infinite;
+}
+
+@keyframes fade-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1;   }
+}
+
+/* ════════════════════════════════════════════════════════════
+   SCREEN 1 — HOME
+   ════════════════════════════════════════════════════════════ */
+
+#waiting-screen {
+  justify-content: center;
+  align-items: center;
+}
+
+.waiting-content {
+  text-align: center;
+  /* Bottom padding clears the fixed mic button */
+  padding: 40px 32px 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+/* ── Family icon image (replaces emoji) ──────────────────────
+   Hero image on home screen — colourful family illustration.
+   Drop-shadow keeps it crisp against the animated gradient.
+   ─────────────────────────────────────────────────────────── */
+
+.family-icon {
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+  margin-bottom: 16px;
+  filter: drop-shadow(0 4px 12px rgba(255, 255, 255, 0.3));
+  animation: heartbeat 2s ease-in-out infinite;
+}
+
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1);    }
+  50%       { transform: scale(1.12); }
+}
+
+.waiting-text {
+  font-size: 80px;
+  font-weight: 700;
+  color: #f0a500;
+  letter-spacing: 4px;
+  margin-bottom: 8px;
+}
+
+.waiting-subtext {
+  font-size: 36px;
+  color: #c8b8a8;
+  font-style: italic;
+  margin-bottom: 36px;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Gallery buttons (Bug 1 fix) ─────────────────────────────
+   Stacked vertically, full width, min 80px tall.
+   Each button is a flex row: [emoji] [label] [badge].
+   Badge is inline inside the button — no absolute positioning.
+   ─────────────────────────────────────────────────────────── */
+
+.gallery-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 540px;
+  padding: 0 8px;
+}
+
+.gallery-btn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 28px;
+  min-height: 80px;
+  width: 100%;
+  background: rgb(105, 7, 189);
+  border: 3px solid rgb(193, 254, 5);
+  border-radius: 22px;
+  color: #ffffff;
+  cursor: pointer;
+  touch-action: manipulation;
+  font-family: inherit;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.gallery-btn:active {
+  background: #3d3d6e;
+  transform: scale(0.98);
+}
+
+.btn-icon {
+  font-size: 56px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.btn-label {
+  font-size: 40px;
+  font-weight: 600;
+  color: #ffffff;
+  flex: 1;
+  text-align: center;
+}
+
+/* ── Inline badge (Bug 1 + Bug 5 fix) ───────────────────────
+   Badge sits inside the button row (not absolute positioned).
+   Large red pill, clearly readable.
+   ─────────────────────────────────────────────────────────── */
+
+.badge-inline {
+  flex-shrink: 0;
+  background: #e53935;
+  color: #fff;
+  border-radius: 24px;
+  padding: 6px 22px;
+  font-size: 32px;
+  font-weight: 800;
+  font-family: -apple-system, sans-serif;
+  min-width: 56px;
+  text-align: center;
+}
+
+.badge-inline.hidden {
+  display: none;
+}
+
+/* ════════════════════════════════════════════════════════════
+   SCREEN 2 — GALLERY
+   ════════════════════════════════════════════════════════════ */
+
+#gallery-screen {
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.gallery-header {
+  flex-shrink: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 24px;
+  background: rgba(26, 26, 46, 0.85);
+  border-bottom: 2px solid #2a2a4e;
+}
+
+.gallery-home-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 56px;
+  line-height: 1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 12px;
+  touch-action: manipulation;
+  transition: background 0.15s;
+  font-family: inherit;
+}
+
+.home-btn-label {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1;
+}
+
+.gallery-home-btn:active {
+  background: rgba(245, 166, 35, 0.15);
+}
+
+.gallery-title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  font-size: 48px;
+  font-weight: 700;
+  color: #f5a623;
+  text-align: center;
+  pointer-events: none;
+}
+
+.gallery-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 16px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  align-content: start;
+}
+
+.gallery-thumb {
+  position: relative;
+  aspect-ratio: 1;
+  min-height: 150px;
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #1a1a2e;
+  touch-action: manipulation;
+  transition: transform 0.1s;
+}
+
+.gallery-thumb:active {
+  transform: scale(0.97);
+}
+
+.gallery-thumb img,
+.gallery-thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.gallery-thumb video {
+  background: #0a0a1a;
+}
+
+/* Gold glow border for unread/unseen items */
+.gallery-thumb.unread {
+  animation: gold-glow 2.2s ease-in-out infinite;
+}
+
+@keyframes gold-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 4px #f5a623,
+                0 0 20px rgba(245, 166, 35, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 4px #f5a623,
+                0 0 44px rgba(245, 166, 35, 0.85);
+  }
+}
+
+.thumb-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.78));
+  padding: 28px 14px 12px;
+}
+
+.thumb-sender {
+  font-size: 28px;
+  font-weight: 600;
+  color: #f0e6d3;
+}
+
+.thumb-play-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 56px;
+  color: rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+}
+
+.thumb-new-pill {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: #f5a623;
+  color: #1a1a2e;
+  font-size: 22px;
+  font-weight: 800;
+  padding: 4px 14px;
+  border-radius: 20px;
+  letter-spacing: 1px;
+}
+
+.gallery-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-size: 44px;
+  color: #4a4060;
+  padding: 60px 20px;
+  line-height: 1.5;
+}
+
+/* ════════════════════════════════════════════════════════════
+   SCREEN 3 — GALLERY FULLSCREEN
+   ════════════════════════════════════════════════════════════ */
+
+#fullscreen-screen {
+  background: #000;
+  cursor: pointer;
+  justify-content: center;
+  align-items: center;
+  /* Bottom padding clears the fixed mic button */
+  padding-bottom: 160px;
+}
+
+#fullscreen-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 28px 32px 40px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.88), transparent);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.fullscreen-sender {
+  font-size: 64px;
+  font-weight: 800;
+  color: #f5a623;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
+  text-align: center;
+}
+
+#fullscreen-media {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#fullscreen-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+#fullscreen-img.hidden,
+#fullscreen-video.hidden {
+  display: none;
+}
+
+#fullscreen-video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+#fullscreen-footer {
+  position: absolute;
+  bottom: 160px; /* sits above the fixed mic button */
+  left: 0;
+  right: 0;
+  padding: 40px 32px 20px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.82));
+  text-align: center;
+  z-index: 10;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+#fullscreen-footer.video-playing {
+  opacity: 0;
+}
+
+/* ════════════════════════════════════════════════════════════
+   SCREEN 4 — INTERRUPT (new message)
+
+   Bug 3 fix:
+     #media-pane  → 65% (was 70%)
+     #control-bar → 35% (was 30%)
+     control-bar background → #1a1a2e (solid, same as page bg)
+     No mic inside the bar — the fixed #mic-button handles it.
+     Bottom padding on control-bar clears the fixed mic button.
+   ════════════════════════════════════════════════════════════ */
+
+#message-screen {
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+/* Top 65%: media area — clean, no text overlays */
+#media-pane {
+  flex: 0 0 65%;
+  position: relative;
+  overflow: hidden;
+  background: #0a0a1a;
+}
+
+.media-container {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 32px;
+}
+
+.media-container.hidden {
+  display: none;
+}
+
+#photo-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+}
+
+#video-player {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 12px;
+  background: #000;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+}
+
+.text-message {
+  font-size: 56px;
+  font-weight: 500;
+  color: #f0e6d3;
+  text-align: center;
+  line-height: 1.4;
+  word-break: break-word;
+  white-space: pre-wrap;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+/* Bottom 35%: semi-transparent dark bar — all content */
+#control-bar {
+  flex: 0 0 35%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 16px 32px 32px;
+  background: rgba(10, 10, 26, 0.72);
+  border-top: 2px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.interrupt-label {
+  font-size: 32px;
+  color: #f5a623;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-align: center;
+}
+
+.sender-name {
+  font-size: 52px;
+  font-weight: 800;
+  color: #f5a623;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  width: 100%;
+}
+
+/* ════════════════════════════════════════════════════════════
+   FIXED MIC BUTTON
+
+   position:fixed, home screen only.
+   JS adds .mic-hidden when navigating away from home;
+   removes it when returning to home.
+   Blue colour scheme — #1565c0 bg, #42a5f5 border.
+   120×120px circular, z-index 200.
+   ════════════════════════════════════════════════════════════ */
+
+#mic-button {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: #1565c0;
+  border: 3px solid #42a5f5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: none;
+  z-index: 200;
+  box-shadow: 0 4px 24px rgba(66, 165, 245, 0.45);
+  transition: background 0.15s, transform 0.15s, box-shadow 0.15s, opacity 0.2s;
+}
+
+#mic-button.mic-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#mic-button.recording {
+  background: #0d47a1;
+  border-color: #90caf9;
+  /* translateX must be preserved in recording state */
+  transform: translateX(-50%) scale(1.08);
+  box-shadow: 0 4px 30px rgba(144, 202, 249, 0.6);
+}
+
+.mic-icon {
+  font-size: 48px;
+  line-height: 1;
+}
+
+.mic-label {
+  font-size: 15px;
+  color: #ffffff;
+  margin-top: 4px;
+  white-space: nowrap;
+}
+
+/* ── Recording indicator — fixed overlay ──────────────────── */
+
+.recording-indicator {
+  position: fixed;
+  top: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(139, 0, 0, 0.92);
+  border-radius: 40px;
+  padding: 16px 36px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 300;
+}
+
+.recording-indicator.hidden {
+  display: none;
+}
+
+.recording-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ff4444;
+  animation: blink 0.8s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1;   }
+  50%       { opacity: 0.2; }
+}
+
+.recording-text {
+  font-size: 36px;
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ── Chime flash ──────────────────────────────────────────── */
+
+@keyframes chime-flash {
+  0%   { background-position: 0% 50%;  }
+  20%  { background-position: 50% 20%; }
+  100% { background-position: 0% 50%;  }
+}
+
+body.chime {
+  animation: gradientShift 20s ease infinite, chime-flash 1.2s ease-out;
+}
+
+/* ════════════════════════════════════════════════════════════
+   LANDSCAPE (iPad 1024×768)
+   ════════════════════════════════════════════════════════════ */
+
+@media (orientation: landscape) {
+
+  /* Home screen */
+  .waiting-content    { padding-bottom: 160px; }
+  .family-icon        { width: 100px; height: 100px; }
+  .waiting-text       { font-size: 58px; }
+  .waiting-subtext    { font-size: 28px; margin-bottom: 24px; }
+  .gallery-buttons    { gap: 14px; }
+  .gallery-btn        { padding: 14px 24px; min-height: 68px; gap: 16px; }
+  .btn-icon           { font-size: 44px; }
+  .btn-label          { font-size: 32px; }
+  .badge-inline       { font-size: 26px; padding: 4px 16px; }
+
+  /* Gallery */
+  .gallery-home-btn   { font-size: 44px; }
+  .gallery-title      { font-size: 38px; }
+  .gallery-grid       { gap: 12px; padding: 12px; }
+
+  /* Fullscreen */
+  #fullscreen-footer  { bottom: 20px; }
+  .fullscreen-sender  { font-size: 48px; }
+
+  /* Interrupt */
+  #control-bar        { padding: 12px 28px 24px; gap: 6px; align-items: center; text-align: center; }
+  .interrupt-label    { font-size: 26px; }
+  .sender-name        { font-size: 40px; }
+  .tap-hint           { font-size: 34px; }
+  .tap-hint-en        { font-size: 22px; }
+  .text-message       { font-size: 48px; }
+
+  /* Mic button */
+  #mic-button         { width: 96px; height: 96px; bottom: 24px; }
+  .mic-icon           { font-size: 40px; }
+}

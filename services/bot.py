@@ -32,6 +32,7 @@
 # LAST UPDATED: 2026-05-24
 # ============================================================
 
+import asyncio
 import datetime
 from pathlib import Path
 
@@ -246,7 +247,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     payload = _build_payload("photo", sender_name, message_id, encoded, "image/jpeg")
-    await context.application.display_server.push_to_display(payload)
+    await context.bot_data["display_server"].push_to_display(payload)
 
 
 async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -286,7 +287,7 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     payload = _build_payload("video", sender_name, message_id, encoded, "video/mp4")
-    await context.application.display_server.push_to_display(payload)
+    await context.bot_data["display_server"].push_to_display(payload)
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -326,7 +327,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     payload = _build_payload("voice", sender_name, message_id, encoded, "audio/ogg")
-    await context.application.display_server.push_to_display(payload)
+    await context.bot_data["display_server"].push_to_display(payload)
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -370,7 +371,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if tts_encoded:
         payload["tts_audio"] = tts_encoded
 
-    await context.application.display_server.push_to_display(payload)
+    await context.bot_data["display_server"].push_to_display(payload)
 
 
 async def handle_video_note(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -410,7 +411,7 @@ async def handle_video_note(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     payload = _build_payload("video", sender_name, message_id, encoded, "video/mp4")
-    await context.application.display_server.push_to_display(payload)
+    await context.bot_data["display_server"].push_to_display(payload)
 
 
 def _is_from_family_group(update: Update) -> bool:
@@ -448,10 +449,11 @@ async def run_bot(display_server) -> None:
 
     Steps:
       1. Build the Application with the bot token
-      2. Store display_server reference on the application
+      2. Store display_server in bot_data so handlers can reach it
       3. Register message handlers for all content types
-      4. Start polling Telegram for new messages
-      5. Run until KeyboardInterrupt or error
+      4. Initialize and start the app, then begin polling
+      5. Suspend until cancelled by the TaskGroup (Ctrl+C or crash)
+      6. Shut down polling and the app lifecycle cleanly
 
     Args:
         display_server (DisplayServer): The running display server instance,
@@ -471,9 +473,10 @@ async def run_bot(display_server) -> None:
     # Build the application with our bot token
     app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
 
-    # Store display_server on the app so handlers can reach it
-    # via context.application.display_server
-    app.display_server = display_server
+    # Store display_server in bot_data so handlers can reach it
+    # via context.bot_data["display_server"]
+    # (Application uses __slots__ — direct attribute assignment is not allowed)
+    app.bot_data["display_server"] = display_server
 
     # Register handlers — one per message type
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
@@ -488,5 +491,27 @@ async def run_bot(display_server) -> None:
     logger.info("Telegram bot started — listening for family messages...")
     logger.info(f"Monitoring group chat ID: {config.FAMILY_GROUP_CHAT_ID}")
 
-    # Start polling — this runs until the process is stopped
-    await app.run_polling(allowed_updates=Update.ALL_TYPES)
+    # python-telegram-bot v20+ must NOT use run_polling() inside an existing
+    # asyncio event loop (asyncio.run() in main.py owns the loop).
+    # The correct pattern is the async context manager with explicit lifecycle.
+    try:
+        async with app:
+            await app.initialize()
+            await app.start()
+            await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+            logger.info("Telegram polling active — waiting for family messages...")
+
+            # Suspend here until the TaskGroup cancels this task (Ctrl+C or crash)
+            await asyncio.get_event_loop().create_future()
+
+    except asyncio.CancelledError:
+        logger.info("Telegram bot shutting down cleanly...")
+    finally:
+        # Graceful shutdown — stop polling then the app lifecycle
+        try:
+            if app.updater.running:
+                await app.updater.stop()
+            if app.running:
+                await app.stop()
+        except Exception as shutdown_error:
+            logger.warning(f"Minor error during bot shutdown: {shutdown_error}")
