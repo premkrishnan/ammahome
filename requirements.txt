@@ -1,0 +1,4 @@
+python-telegram-bot[webhooks]
+aiohttp
+gTTS
+python-dotenv

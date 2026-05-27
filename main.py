@@ -26,7 +26,7 @@
 #   python main.py --test   ← validates config and exits
 #
 # AUTHOR: AmmaHome
-# LAST UPDATED: 2026-05-24
+# LAST UPDATED: 2026-05-27
 # ============================================================
 
 import asyncio
@@ -92,14 +92,14 @@ async def start_all_services() -> None:
     from services.heartbeat import HeartbeatMonitor
     from services.bot import run_bot
 
-    # Step 3: Create the display server (WebSocket + HTTP)
+    # Step 3: Create the display server (combined HTTP + WebSocket on one port)
     display_server = DisplayServer()
 
     # Step 4: Create the heartbeat monitor
     heartbeat_monitor = HeartbeatMonitor(display_server=display_server)
 
-    # Step 5: Start display server and heartbeat monitor as background tasks
-    logger.info("Starting WebSocket display server...")
+    # Step 5: Start the combined server and heartbeat monitor as background tasks
+    logger.info("Starting combined HTTP + WebSocket display server...")
     logger.info("Starting heartbeat monitor...")
 
     async with asyncio.TaskGroup() as task_group:

@@ -2,13 +2,12 @@
 # FILE: services/display_server.py
 #
 # PURPOSE:
-#   Runs two servers for the iPad display:
-#     1. WebSocket server — pushes media payloads to the iPad
-#        and receives ack/heartbeat/voice_reply from the iPad.
-#     2. HTTP server — serves the static display/ web app so
-#        Safari on the iPad can load the display page.
-#   Maintains a message queue so content is not lost when the
-#   iPad is briefly offline, and flushes it on reconnect.
+#   Runs a single combined aiohttp server for the iPad display.
+#   HTTP routes serve the static display/ web app; the /ws route
+#   handles WebSocket upgrades for real-time communication.
+#   Listens on the PORT env var (set by Railway) or falls back to
+#   config.PORT. Maintains a message queue so content is not lost
+#   when the iPad is briefly offline, and flushes on reconnect.
 #
 # INPUTS:
 #   - JSON payloads from bot.py via push_to_display()
@@ -21,13 +20,11 @@
 #   - Voice reply files saved to temp/ for bot.py to forward
 #
 # DEPENDENCIES:
-#   - websockets (pip install websockets)
 #   - aiohttp (pip install aiohttp)
-#   - aiofiles (pip install aiofiles)
-#   - config.py → DISPLAY_SERVER_HOST, DISPLAY_SERVER_PORT,
-#                  DISPLAY_WEB_PORT, MAX_MEDIA_QUEUE_SIZE, TEMP_DIR
+#   - config.py → DISPLAY_SERVER_HOST, PORT, MAX_MEDIA_QUEUE_SIZE,
+#                  TEMP_DIR, DISPLAY_DIR
 #   - utils/logger.py
-#   - utils/file_utils.py → make_temp_path, delete_temp_file
+#   - utils/file_utils.py → make_temp_path
 #
 # CALLED BY:
 #   - main.py → display_server.start()
@@ -36,7 +33,7 @@
 #                              display_server.is_ipad_connected()
 #
 # AUTHOR: AmmaHome
-# LAST UPDATED: 2026-05-24
+# LAST UPDATED: 2026-05-27
 # ============================================================
 
 import asyncio
@@ -45,8 +42,6 @@ import datetime
 import json
 from pathlib import Path
 
-import websockets
-from websockets.server import WebSocketServerProtocol
 from aiohttp import web
 
 import config
@@ -70,7 +65,7 @@ class DisplayServer:
         Initialises the DisplayServer with an empty client set and queue.
 
         Steps:
-          1. Create an empty set for connected WebSocket clients
+          1. Create an empty set for connected aiohttp WebSocketResponse clients
           2. Create an empty list for the offline message queue
           3. Initialise the last heartbeat timestamp to None
           4. Create a voice reply callback slot (set by external code)
@@ -86,7 +81,7 @@ class DisplayServer:
             await server.start()
         """
         # Active WebSocket connections (one per iPad browser tab)
-        self._clients: set[WebSocketServerProtocol] = set()
+        self._clients: set[web.WebSocketResponse] = set()
 
         # Queue for messages received while iPad was offline
         # Flushed automatically when iPad reconnects
@@ -196,13 +191,13 @@ class DisplayServer:
 
     async def start(self) -> None:
         """
-        Starts the WebSocket server and HTTP server concurrently.
+        Starts the combined HTTP + WebSocket server on a single port.
 
         Steps:
-          1. Start WebSocket server on DISPLAY_SERVER_PORT
-          2. Start HTTP server on DISPLAY_WEB_PORT
-          3. Log the URLs the iPad should connect to
-          4. Run both servers until cancelled
+          1. Build the aiohttp app (HTTP routes + /ws WebSocket route)
+          2. Start the server on DISPLAY_SERVER_HOST:PORT
+          3. Log the iPad display URL and WebSocket path
+          4. Run until the task is cancelled
 
         Args:
             None
@@ -213,79 +208,80 @@ class DisplayServer:
         Example:
             await server.start()
         """
-        ws_server = websockets.serve(
-            self._handle_client,
+        app = self._build_http_app()
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(
+            runner,
             config.DISPLAY_SERVER_HOST,
-            config.DISPLAY_SERVER_PORT,
+            config.PORT,
+        )
+        await site.start()
+
+        logger.info(
+            f"Combined HTTP+WebSocket server listening on "
+            f"http://{config.DISPLAY_SERVER_HOST}:{config.PORT}"
+        )
+        logger.info(
+            f"WebSocket path: ws://{config.DISPLAY_SERVER_HOST}:{config.PORT}/ws"
+        )
+        logger.info(
+            f"iPad display URL: http://{config.DISPLAY_SERVER_HOST}:{config.PORT}"
         )
 
-        http_app = self._build_http_app()
-        http_runner = web.AppRunner(http_app)
-        await http_runner.setup()
-        http_site = web.TCPSite(
-            http_runner,
-            config.DISPLAY_SERVER_HOST,
-            config.DISPLAY_WEB_PORT,
-        )
-
-        async with ws_server:
-            await http_site.start()
-            logger.info(
-                f"WebSocket server listening on "
-                f"ws://{config.DISPLAY_SERVER_HOST}:{config.DISPLAY_SERVER_PORT}"
-            )
-            logger.info(
-                f"HTTP server listening on "
-                f"http://{config.DISPLAY_SERVER_HOST}:{config.DISPLAY_WEB_PORT}"
-            )
-            logger.info(
-                f"iPad display URL: "
-                f"http://{config.DISPLAY_SERVER_HOST}:{config.DISPLAY_WEB_PORT}"
-            )
-            # Run forever until the task is cancelled
-            await asyncio.get_event_loop().create_future()
+        # Run forever until the task is cancelled
+        await asyncio.get_event_loop().create_future()
 
     # ── WebSocket connection handler ──────────────────────────
 
     async def _handle_client(
-        self, websocket: WebSocketServerProtocol
-    ) -> None:
+        self, request: web.Request
+    ) -> web.WebSocketResponse:
         """
-        Handles a single WebSocket connection from an iPad.
+        Handles a single WebSocket connection from an iPad via aiohttp.
 
         Steps:
-          1. Register the new client
-          2. Flush the offline queue to the newly connected iPad
-          3. Loop receiving messages until the connection closes
-          4. Dispatch each incoming message to the right handler
-          5. Deregister the client when the connection drops
+          1. Perform the WebSocket handshake
+          2. Register the new client
+          3. Flush the offline queue to the newly connected iPad
+          4. Loop receiving messages until the connection closes
+          5. Dispatch each incoming message to the right handler
+          6. Deregister the client when the connection drops
 
         Args:
-            websocket (WebSocketServerProtocol): The connected WebSocket.
+            request (web.Request): The aiohttp HTTP upgrade request.
 
         Returns:
-            None
+            web.WebSocketResponse: The completed WebSocket response object.
 
         Example:
-            # Called automatically by websockets.serve()
+            # Registered as aiohttp route: app.router.add_get('/ws', ...)
         """
-        client_addr = websocket.remote_address
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
+
+        client_addr = request.remote
         logger.info(f"iPad connected from {client_addr}")
-        self._clients.add(websocket)
+        self._clients.add(ws)
 
         # Flush any queued messages to the newly connected iPad
-        await self._flush_queue(websocket)
+        await self._flush_queue(ws)
 
         try:
-            async for raw_message in websocket:
-                await self._dispatch_incoming(raw_message)
-        except websockets.exceptions.ConnectionClosed as error:
-            logger.info(f"iPad disconnected from {client_addr}: {error}")
+            async for msg in ws:
+                if msg.type == web.WSMsgType.TEXT:
+                    await self._dispatch_incoming(msg.data)
+                elif msg.type == web.WSMsgType.ERROR:
+                    logger.error(
+                        f"WebSocket error from {client_addr}: {ws.exception()}"
+                    )
         except Exception as error:
             logger.error(f"Unexpected error on WebSocket connection: {error}")
         finally:
-            self._clients.discard(websocket)
+            self._clients.discard(ws)
             logger.info(f"iPad removed from client set: {client_addr}")
+
+        return ws
 
     async def _dispatch_incoming(self, raw_message: str) -> None:
         """
@@ -414,23 +410,23 @@ class DisplayServer:
 
     # ── Queue management ──────────────────────────────────────
 
-    async def _flush_queue(self, websocket: WebSocketServerProtocol) -> None:
+    async def _flush_queue(self, ws: web.WebSocketResponse) -> None:
         """
         Sends all queued messages to a newly connected iPad.
 
         Steps:
           1. Check if the queue has messages
-          2. Send each message in order
+          2. Send each message in order using aiohttp send_str
           3. Clear the queue after successful flush
 
         Args:
-            websocket (WebSocketServerProtocol): The newly connected iPad socket.
+            ws (web.WebSocketResponse): The newly connected iPad socket.
 
         Returns:
             None
 
         Example:
-            await self._flush_queue(websocket)
+            await self._flush_queue(ws)
             # All queued messages are delivered to the iPad
         """
         if not self._queue:
@@ -440,7 +436,7 @@ class DisplayServer:
 
         for payload in self._queue:
             try:
-                await websocket.send(json.dumps(payload))
+                await ws.send_str(json.dumps(payload))
                 logger.info(
                     f"Flushed queued {payload.get('type')} "
                     f"from {payload.get('sender')} to iPad"
@@ -478,11 +474,11 @@ class DisplayServer:
             return
 
         json_payload = json.dumps(payload)
-        disconnected: set[WebSocketServerProtocol] = set()
+        disconnected: set[web.WebSocketResponse] = set()
 
         for client in self._clients:
             try:
-                await client.send(json_payload)
+                await client.send_str(json_payload)
                 logger.info(
                     f"Sent {payload.get('type')} from {payload.get('sender')} to iPad"
                 )
@@ -497,12 +493,14 @@ class DisplayServer:
 
     def _build_http_app(self) -> web.Application:
         """
-        Builds the aiohttp application that serves the display/ directory.
+        Builds the aiohttp application that serves HTTP and WebSocket on one port.
 
         Steps:
           1. Create an aiohttp Application
-          2. Add a catch-all route that serves files from display/
-          3. Return the application
+          2. Add the /ws route for WebSocket upgrades
+          3. Add the root route serving index.html
+          4. Add the static file route for CSS/JS assets
+          5. Return the application
 
         Args:
             None
@@ -515,6 +513,7 @@ class DisplayServer:
             runner = web.AppRunner(app)
         """
         app = web.Application()
+        app.router.add_get("/ws", self._handle_client)
         app.router.add_get("/", self._serve_index)
         app.router.add_static("/", config.DISPLAY_DIR, show_index=False)
         return app

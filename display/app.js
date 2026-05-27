@@ -41,16 +41,17 @@
 //   - display/index.html (<script src="app.js">)
 //
 // AUTHOR: AmmaHome
-// LAST UPDATED: 2026-05-25 (mic home-only, gradient bg, blue mic, family icon)
+// LAST UPDATED: 2026-05-27 (single-port: ws path /ws, wss on https)
 // ============================================================
 
 'use strict';
 
 // ── WebSocket config ──────────────────────────────────────────
 
-const WS_HOST = window.location.hostname;
-const WS_PORT = 8765;
-const WS_URL  = `ws://${WS_HOST}:${WS_PORT}`;
+// Use the same host:port the page was loaded from, with wss:// on https.
+// This works on localhost, on the home Wi-Fi, and on Railway (single port).
+const WS_PROTOCOL = location.protocol === 'https:' ? 'wss:' : 'ws:';
+const WS_URL      = `${WS_PROTOCOL}//${location.host}/ws`;
 
 const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const RECONNECT_DELAY_MS    = 3000;
@@ -155,7 +156,7 @@ const recordingIndicator = document.getElementById('recording-indicator');
  *   4. On message: route to handleServerMessage
  */
 function connect() {
-  console.log(`[AmmaHome] Connecting to ${WS_URL}...`);
+  console.log(`[AmmaHome] Connecting to ${WS_URL}...`);  // e.g. ws://192.168.0.10:8080/ws
   socket = new WebSocket(WS_URL);
 
   socket.addEventListener('open', () => {

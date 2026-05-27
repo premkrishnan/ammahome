@@ -142,8 +142,19 @@ Core pipeline: Telegram bot → display server → iPad display.
 All message types working (photo, video, voice, text + TTS).
 Gallery, mic recording, heartbeat monitoring all implemented.
 
-**Phase 2 — Next**
-Cloud deployment and physical iPad setup at Amma's home.
+**Phase 2 — In Progress**
+Railway cloud deployment. Single combined HTTP + WebSocket server.
+
+---
+
+## Deployment: Railway
+
+- Single service — HTTP and WebSocket (`/ws` path) on the same port
+- Railway sets `PORT` automatically; local default is `8080`
+- iPad opens `http://<host>` and JS connects to `ws://<host>/ws` (or `wss://` on https)
+- Deploy: `git push` to `main` triggers auto-deploy on Railway
+- Logs: `railway logs`
+- Env vars must be set in the Railway dashboard — **not** in `.env` (never committed)
 
 ---
 

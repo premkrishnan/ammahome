@@ -20,7 +20,7 @@
 #   - All service files and main.py
 #
 # AUTHOR: AmmaHome
-# LAST UPDATED: 2026-05-24
+# LAST UPDATED: 2026-05-27
 # ============================================================
 
 import json
@@ -74,14 +74,12 @@ FAMILY_GROUP_CHAT_ID: int = int(_require("FAMILY_GROUP_CHAT_ID"))
 
 # ── Display Server ────────────────────────────────────────────
 
-# Mac's local IP address — iPad connects to this on home Wi-Fi
+# Host to bind on — 0.0.0.0 accepts connections from all interfaces
 DISPLAY_SERVER_HOST: str = os.getenv("DISPLAY_SERVER_HOST", "0.0.0.0")
 
-# WebSocket port — bot pushes content to iPad over this connection
-DISPLAY_SERVER_PORT: int = int(os.getenv("DISPLAY_SERVER_PORT", "8765"))
-
-# HTTP port — iPad Safari loads the display web page from this port
-DISPLAY_WEB_PORT: int = int(os.getenv("DISPLAY_WEB_PORT", "8080"))
+# Single port for HTTP + WebSocket (/ws path).
+# Railway injects PORT automatically; local default is 8080.
+PORT: int = int(os.getenv("PORT", "8080"))
 
 
 # ── Reminder & Heartbeat ──────────────────────────────────────
@@ -174,8 +172,8 @@ def print_config_summary() -> None:
     print("=" * 60)
     print(f"  Telegram bot token : {masked_token}")
     print(f"  Family group ID    : {FAMILY_GROUP_CHAT_ID}")
-    print(f"  Display WebSocket  : ws://{DISPLAY_SERVER_HOST}:{DISPLAY_SERVER_PORT}")
-    print(f"  iPad display URL   : http://{DISPLAY_SERVER_HOST}:{DISPLAY_WEB_PORT}")
+    print(f"  Display server     : http://{DISPLAY_SERVER_HOST}:{PORT}")
+    print(f"  WebSocket path     : ws://{DISPLAY_SERVER_HOST}:{PORT}/ws")
     print(f"  Reminder interval  : every {REMINDER_INTERVAL_SECONDS // 60} minutes")
     print(f"  Heartbeat timeout  : {HEARTBEAT_TIMEOUT_MINUTES} minutes")
     print(f"  TTS language       : {TTS_LANGUAGE} ({TTS_BACKEND})")
