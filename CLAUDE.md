@@ -147,14 +147,14 @@ Railway cloud deployment. Single combined HTTP + WebSocket server.
 
 ---
 
-## Deployment: Railway
+## Production Deployment
 
-- Single service — HTTP and WebSocket (`/ws` path) on the same port
-- Railway sets `PORT` automatically; local default is `8080`
-- iPad opens `http://<host>` and JS connects to `ws://<host>/ws` (or `wss://` on https)
-- Deploy: `git push` to `main` triggers auto-deploy on Railway
-- Logs: `railway logs`
-- Env vars must be set in the Railway dashboard — **not** in `.env` (never committed)
+- Server: Brahma (AMD Ryzen 7700, Ubuntu, Singapore)
+- URL: https://ammahome.brahmaserver.dev
+- AmmaHome: systemd service `ammahome`
+- Tunnel: Cloudflare named tunnel `ammahome` (7173370d-4e60-424f-b331-0861303f148f)
+- Domain: brahmaserver.dev (Cloudflare Registrar)
+- Future projects: *.brahmaserver.dev subdomains
 
 ---
 
