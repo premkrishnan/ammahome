@@ -25,14 +25,33 @@ and videos, and hold a mic button to send a voice note back to everyone.
 
 ---
 
+## Deployment Options
+
+AmmaHome supports two deployment modes:
+
+| Mode | Use case | iPad access |
+|------|----------|-------------|
+| **Local (Mac)** | Development and testing | Same Wi-Fi network only |
+| **Production (Brahma + Cloudflare Tunnel)** | Always-on, accessible from anywhere | Public HTTPS URL |
+
+---
+
 ## System Requirements
 
-- **Mac** (tested on MacBook M4, macOS Tahoe) — runs the Python bot and display server
+### Local (Mac) Mode
+- **Mac** (tested on MacBook M4, macOS Tahoe)
 - **Python 3.12 or newer**
-- **iPad** (7th generation or newer recommended) — the always-on display
-- **Home Wi-Fi** — Mac and iPad must be on the same network
-- **Internet connection** — for Telegram, TTS audio, and family alerts
-- **ffmpeg** — for audio format conversion (voice messages)
+- **iPad** on the same Wi-Fi network as your Mac
+- **ffmpeg** — for audio format conversion
+- **Internet connection** — for Telegram, TTS, and family alerts
+
+### Production (Brahma) Mode
+- **Linux server** (tested on Ubuntu, AMD Ryzen 7700) — runs 24/7
+- **Python 3.12 or newer**
+- **iPad** anywhere with internet access
+- **ffmpeg** — for audio format conversion
+- **Cloudflare account** — for the free tunnel (no credit card required)
+- **Domain on Cloudflare** — for a permanent public URL
 
 ---
 
@@ -42,22 +61,22 @@ and videos, and hold a mic button to send a voice note back to everyone.
 |-------------------|-------------------------------------------------|
 | Bot backend       | Python 3.12+                                    |
 | Telegram          | python-telegram-bot                             |
-| Bot↔iPad comms    | WebSocket (websockets library)                  |
-| HTTP file server  | aiohttp + aiofiles                              |
+| Bot↔iPad comms    | WebSocket on `/ws` path via aiohttp             |
+| HTTP file server  | aiohttp + aiofiles (single port for HTTP + WS)  |
 | iPad display      | HTML + CSS + JS in Safari (fullscreen)          |
 | TTS (Malayalam)   | gTTS (Google Text-to-Speech)                    |
 | Audio conversion  | ffmpeg                                          |
 | Config            | python-dotenv + config.py                       |
 | Logging           | utils/logger.py                                 |
+| Tunnel (prod)     | Cloudflare Tunnel (cloudflared)                 |
 
 ---
 
-## Step-by-Step Setup
+## Local (Mac) Setup
 
 ### Step 1 — Install system dependencies
 
 ```bash
-# Install ffmpeg (needed for audio format conversion)
 brew install ffmpeg
 ```
 
@@ -71,14 +90,14 @@ cd AmmaHome
 ### Step 3 — Create a Python virtual environment
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv venv
+source venv/bin/activate
 ```
 
 ### Step 4 — Install Python dependencies
 
 ```bash
-pip install python-telegram-bot websockets gTTS python-dotenv aiohttp aiofiles
+pip install -r requirements.txt
 ```
 
 ### Step 5 — Create the Telegram bot
@@ -95,25 +114,15 @@ pip install python-telegram-bot websockets gTTS python-dotenv aiohttp aiofiles
 2. Add all family members (including anyone overseas)
 3. Add your AmmaHome bot to the group
 4. **Make the bot an Admin** — without this, it cannot read messages
-   - Tap the group name → Edit → Administrators → Add Admin → select your bot
-5. Find the group chat ID:
-   - Add **@userinfobot** to the group temporarily
-   - It will reply with the group ID (a negative number like `-1001234567890`)
-   - Remove @userinfobot after you have the ID
+5. Find the group chat ID by adding **@userinfobot** to the group temporarily — it replies with the group ID (a negative number like `-1001234567890`). Remove it after.
 
 ### Step 7 — Find family member Telegram IDs
 
-Each family member who should appear as a named sender:
-
-1. They send any message to **@userinfobot** directly (private chat)
-2. It replies with their numeric user ID (like `123456789`)
-3. Collect all IDs — you will put them in `.env` in the next step
+Each family member sends any message to **@userinfobot** directly (private chat). It replies with their numeric user ID (like `123456789`). Collect all IDs.
 
 ### Step 8 — Find your Mac's local IP address
 
-Go to: **System Settings → Wi-Fi → Details → IP Address**
-
-It will look like `192.168.1.10`. Write it down.
+**System Settings → Wi-Fi → Details → IP Address** — looks like `192.168.1.10`.
 
 ### Step 9 — Set up your .env file
 
@@ -121,56 +130,265 @@ It will look like `192.168.1.10`. Write it down.
 cp .env.example .env
 ```
 
-Open `.env` and fill in your values:
+Open `.env` and fill in:
 
 ```
+# ── Core ──────────────────────────────────────────────────────
 TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrSTUvwxYZ
 FAMILY_GROUP_CHAT_ID=-1001234567890
 DISPLAY_SERVER_HOST=192.168.1.10
-DISPLAY_SERVER_PORT=8080
-WS_PORT=8765
-FAMILY_MEMBER_NAMES={"123456789": "Prem", "987654321": "Priya", "555000111": "Rajan"}
+PORT=8080
+
+# ── Reminder & Heartbeat ──────────────────────────────────────
+REMINDER_INTERVAL_SECONDS=900
+HEARTBEAT_INTERVAL_SECONDS=300
 HEARTBEAT_TIMEOUT_MINUTES=15
+
+# ── TTS (Text-to-Speech) ──────────────────────────────────────
+TTS_LANGUAGE=ml
+TTS_BACKEND=google
+
+# ── Media Queue ───────────────────────────────────────────────
 MAX_MEDIA_QUEUE_SIZE=10
+
+# ── Family Members ────────────────────────────────────────────
+FAMILY_MEMBER_NAMES={"123456789": "Prem", "987654321": "Priya"}
 ```
 
 > **DISPLAY_SERVER_HOST** is your Mac's local IP from Step 8.
-> **FAMILY_MEMBER_NAMES** maps Telegram user IDs to display names. Use real first names.
+> HTTP and WebSocket share the same port — WebSocket connects on `/ws` path automatically.
 
-### Step 10 — Test the configuration
-
-```bash
-python main.py --test
-```
-
-This checks your `.env` without starting any services. If anything is wrong,
-it tells you exactly which value is missing or incorrect. Fix all errors before continuing.
-
-### Step 11 — Set up the iPad
+### Step 10 — Set up the iPad
 
 1. Make sure the iPad is on the **same Wi-Fi network** as your Mac
-2. Plug the iPad into its charger (it will be always-on)
-3. Open **Safari** on the iPad
-4. Go to: `http://192.168.1.10:8080`
-   (replace `192.168.1.10` with your Mac's IP from Step 8)
-5. The AmmaHome screen should appear with the family icon and Malayalam text
-6. To add it to the home screen: tap the **Share** button (box with arrow) → **Add to Home Screen**
-7. Disable auto-lock so the screen never goes dark:
-   **Settings → Display & Brightness → Auto-Lock → Never**
-8. Open the saved shortcut from the home screen — it runs fullscreen with no browser UI
+2. Plug the iPad into its charger (always-on)
+3. Open **Safari** on the iPad and go to: `http://192.168.1.10:8080`
+4. Tap **Share → Add to Home Screen** to bookmark it
+5. **Settings → Display & Brightness → Auto-Lock → Never**
+6. Tap the screen once on first load to unlock Safari's audio permissions
 
-> **First tap:** When the iPad loads for the first time, tap the screen once anywhere.
-> This unlocks Safari's audio permissions so voice messages and TTS play automatically.
-
-### Step 12 — Start AmmaHome
+### Step 11 — Start AmmaHome
 
 ```bash
 python main.py
 ```
 
-You will see a startup summary with all settings confirmed. The Mac terminal must stay
-open while AmmaHome is running. Send a test message from Telegram — it should appear
-on the iPad within a few seconds.
+Send a test message from Telegram — it should appear on the iPad within seconds.
+
+---
+
+## Production (Brahma + Cloudflare Tunnel) Setup
+
+This runs AmmaHome 24/7 on a home server with a permanent public HTTPS URL so
+Amma's iPad can connect from anywhere — no Mac needed, no same-network requirement.
+
+### Step 1 — SSH into Brahma
+
+```bash
+ssh prem@brahma   # or use Tailscale IP: ssh prem@100.x.x.x
+```
+
+### Step 2 — Clone and set up
+
+```bash
+sudo apt update && sudo apt install -y git python3 python3-venv python3-pip ffmpeg
+
+git clone https://github.com/premkrishnan/AmmaHome.git ~/Desktop/ai/non_agentic/ammahome
+cd ~/Desktop/ai/non_agentic/ammahome
+
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Step 3 — Create .env on Brahma
+
+```bash
+cat > .env << 'EOF'
+# ── Core ──────────────────────────────────────────────────────
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+FAMILY_GROUP_CHAT_ID=your_group_chat_id_here
+DISPLAY_SERVER_HOST=0.0.0.0
+PORT=8080
+
+# ── Reminder & Heartbeat ──────────────────────────────────────
+REMINDER_INTERVAL_SECONDS=900
+HEARTBEAT_INTERVAL_SECONDS=300
+HEARTBEAT_TIMEOUT_MINUTES=15
+
+# ── TTS (Text-to-Speech) ──────────────────────────────────────
+TTS_LANGUAGE=ml
+TTS_BACKEND=google
+
+# ── Media Queue ───────────────────────────────────────────────
+MAX_MEDIA_QUEUE_SIZE=10
+
+# ── Family Members ────────────────────────────────────────────
+FAMILY_MEMBER_NAMES={"000000000": "Prem"}
+EOF
+```
+
+> **DISPLAY_SERVER_HOST** must be `0.0.0.0` on Brahma (listen on all interfaces).
+> **PORT** must be set explicitly — unlike Railway, Brahma does not inject it automatically.
+
+### Step 4 — Install Cloudflare Tunnel
+
+```bash
+curl -L --output cloudflared.deb \
+  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+sudo dpkg -i cloudflared.deb && rm cloudflared.deb
+cloudflared --version
+```
+
+### Step 5 — Create named tunnel
+
+```bash
+cloudflared tunnel login        # opens a browser URL — authorize brahmaserver.dev
+cloudflared tunnel create ammahome
+cloudflared tunnel list         # note the tunnel UUID
+```
+
+### Step 6 — Create tunnel config
+
+```bash
+cat > ~/.cloudflared/config.yml << 'EOF'
+tunnel: YOUR-TUNNEL-UUID
+credentials-file: /home/prem/.cloudflared/YOUR-TUNNEL-UUID.json
+
+ingress:
+  - hostname: ammahome.brahmaserver.dev
+    service: http://localhost:8080
+  - service: http_status:404
+EOF
+
+cloudflared tunnel route dns ammahome ammahome.brahmaserver.dev
+```
+
+### Step 7 — Create systemd services
+
+**AmmaHome service:**
+
+```bash
+sudo tee /etc/systemd/system/ammahome.service << 'EOF'
+[Unit]
+Description=AmmaHome Display Server
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=prem
+WorkingDirectory=/home/prem/Desktop/ai/non_agentic/ammahome
+EnvironmentFile=/home/prem/Desktop/ai/non_agentic/ammahome/.env
+ExecStart=/home/prem/Desktop/ai/non_agentic/ammahome/venv/bin/python main.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+**Cloudflare Tunnel service:**
+
+```bash
+sudo tee /etc/systemd/system/cloudflared.service << 'EOF'
+[Unit]
+Description=Cloudflare Tunnel - brahmaserver.dev
+After=network.target
+
+[Service]
+Type=simple
+User=prem
+ExecStart=/usr/bin/cloudflared tunnel --config /home/prem/.cloudflared/config.yml run
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+> Check `which cloudflared` — update `ExecStart` if it returns `/usr/local/bin/cloudflared`.
+
+### Step 8 — Enable and start
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable ammahome cloudflared
+sudo systemctl start ammahome cloudflared
+sudo systemctl status ammahome cloudflared --no-pager
+```
+
+### Step 9 — Set up the iPad
+
+Open `https://ammahome.brahmaserver.dev` in Safari on the iPad.
+Tap **Share → Add to Home Screen**. Set Auto-Lock to Never. Tap once to unlock audio.
+
+---
+
+## Production URL
+
+```
+https://ammahome.brahmaserver.dev
+```
+
+This URL is permanent. Brahma reboots, cloudflared restarts — the URL never changes.
+
+---
+
+## Adding Future Projects to brahmaserver.dev
+
+To expose a new project (e.g. LingoBridge on port 8081), add a new ingress rule
+to `~/.cloudflared/config.yml` and create a DNS record:
+
+```yaml
+ingress:
+  - hostname: ammahome.brahmaserver.dev
+    service: http://localhost:8080
+  - hostname: lingobridge.brahmaserver.dev
+    service: http://localhost:8081
+  - service: http_status:404
+```
+
+```bash
+cloudflared tunnel route dns ammahome lingobridge.brahmaserver.dev
+sudo systemctl restart cloudflared
+```
+
+---
+
+## Ongoing Maintenance
+
+### Deploy code updates
+
+```bash
+cd ~/Desktop/ai/non_agentic/ammahome
+git pull
+source venv/bin/activate
+pip install -r requirements.txt   # only if dependencies changed
+sudo systemctl restart ammahome
+journalctl -u ammahome -f         # watch startup logs
+```
+
+### Useful commands
+
+```bash
+# View live logs
+journalctl -u ammahome -f
+journalctl -u cloudflared -f
+
+# Check status of both services
+sudo systemctl status ammahome cloudflared --no-pager
+
+# Check what's listening on port 8080
+ss -tlnp | grep 8080
+
+# Restart both after any config change
+sudo systemctl restart ammahome cloudflared
+```
 
 ---
 
@@ -186,15 +404,13 @@ on the iPad within a few seconds.
 
 ### For Amma
 
-The screen shows new messages automatically. She has four interactions:
-
 | What Amma sees / does | What it does |
 |---|---|
-| New message appears on screen | It was sent automatically — nothing to do |
+| New message appears on screen | Sent automatically — nothing to do |
 | **Tap anywhere** on the screen | Says "I saw it" — notifies the family |
 | **📷 Photos** button | Browse all photos the family has sent |
 | **🎥 Videos** button | Browse all videos the family has sent |
-| **Hold the blue 🎙️ button** | Records a voice note — release to send it to family |
+| **Hold the blue 🎙️ button** | Records a voice note — release to send to family |
 
 ---
 
@@ -202,18 +418,16 @@ The screen shows new messages automatically. She has four interactions:
 
 | Problem | Cause | Fix |
 |---|---|---|
-| Display not loading on iPad | Wrong IP or not on same Wi-Fi | Check Mac IP in `.env`. Are both on same Wi-Fi network? |
+| Display not loading on iPad (local) | Wrong IP or different Wi-Fi | Check Mac IP in `.env`. Both must be on same Wi-Fi. |
+| Display not loading on iPad (prod) | Service not running | `sudo systemctl status ammahome` on Brahma |
 | "Config error: TELEGRAM_BOT_TOKEN is missing" | `.env` not set up | Open `.env` and add the token from BotFather |
-| Bot not receiving any messages | Bot is not Admin in the group | Open the group → Edit → Administrators → make the bot an Admin |
-| "Bot was blocked by the user" error | Bot was removed from group | Re-add the bot to the group and make it Admin |
-| Family offline alert not sending | Wrong group chat ID | Get the correct ID using @userinfobot in the group |
-| TTS not speaking / audio silent | Safari autoplay not yet unlocked | Tap the iPad screen once — Safari needs one tap before audio works |
-| Voice note not recording | Microphone not allowed in Safari | Safari → Settings → allow microphone for this site |
-| TTS not working at all | No internet on Mac | gTTS needs internet — check Mac's internet connection |
-| Screen going dark on iPad | Auto-Lock is on | Settings → Display & Brightness → Auto-Lock → **Never** |
-| `run_polling()` event loop error on Mac | asyncio conflict with python-telegram-bot | Use `run_polling()` inside `asyncio.run()` — see `main.py` for the correct pattern |
-| `Application __slots__` error | Wrong way to store custom data on the bot | Use `context.bot_data` instead of setting attributes directly on `Application` |
-| Audio plays on first message but not later | Blob URL revoked too early | The blob URL must stay alive until audio finishes playing |
+| Bot not receiving messages | Bot is not Admin in group | Group → Edit → Administrators → make bot Admin |
+| TTS not speaking | Safari autoplay not unlocked | Tap the iPad screen once on first load |
+| Voice note not recording | Microphone not allowed | Safari → Settings → allow microphone for this site |
+| Screen going dark | Auto-Lock is on | Settings → Display & Brightness → Auto-Lock → Never |
+| `run_polling()` event loop error | asyncio conflict | Use `run_polling()` inside `asyncio.run()` — see `main.py` |
+| `Application __slots__` error | Wrong bot data storage | Use `context.bot_data` instead of attributes on `Application` |
+| Cloudflared URL changed | Quick tunnel restarted | Named tunnel on brahmaserver.dev has a permanent URL — use that |
 
 ---
 
@@ -222,26 +436,26 @@ The screen shows new messages automatically. She has four interactions:
 ```
 ammahome/
 ├── CLAUDE.md              ← Project context for Claude Code — read first
-├── SKILL.md               ← Coding law — read before writing any code
+├── SKILL.md               ← Coding standards — read before writing any code
 ├── README.md              ← This file
 ├── .env                   ← Your secrets (never commit this)
 ├── .env.example           ← Template — copy to .env and fill in
 ├── .gitignore
 ├── config.py              ← All settings — values come from .env
-├── main.py                ← Entry point: python main.py [--test]
+├── main.py                ← Entry point: python main.py
 ├── services/
 │   ├── bot.py             ← Telegram bot — handles all incoming messages
-│   ├── display_server.py  ← WebSocket + HTTP server — talks to iPad
+│   ├── display_server.py  ← aiohttp server — HTTP + WebSocket on single port
 │   ├── heartbeat.py       ← Monitors iPad connection, alerts family if offline
 │   ├── media_handler.py   ← Downloads and prepares Telegram media files
 │   └── tts.py             ← Converts text messages to Malayalam speech (gTTS)
 ├── display/
-│   ├── index.html         ← iPad display page (four screens)
+│   ├── index.html         ← iPad display page
 │   ├── style.css          ← Large fonts, animated gradient, warm colours
-│   ├── app.js             ← WebSocket client, gallery, mic recording
+│   ├── app.js             ← WebSocket client on /ws, gallery, mic recording
 │   └── family-icon.png    ← Family illustration shown on home screen
 ├── utils/
-│   ├── logger.py          ← Shared logging — imported by all services
+│   ├── logger.py          ← Shared logging
 │   └── file_utils.py      ← Temp file creation and cleanup helpers
 └── temp/                  ← Auto-cleared media files (photos, audio, video)
 ```
@@ -274,18 +488,22 @@ Core pipeline: Telegram → bot → WebSocket → iPad display
 - Amma sends voice replies back to family
 - Heartbeat monitoring — family alerted if iPad goes offline
 - Safari autoplay unlock, self-healing WebSocket reconnect
+- WebSocket merged into aiohttp — single port for HTTP and WS
 
-### Phase 2 — Planned
-- Deploy to cloud server for 24/7 running (no Mac needed)
-- Auto-start on system boot
-- Physical setup on Amma's iPad (iPad A16 11")
-- Add all remaining family members including Dubai
+### Phase 2 — Complete ✅
+Production deployment: always-on, accessible from anywhere
+
+- Deployed to Brahma (AMD Ryzen 7700, Ubuntu, Singapore)
+- Cloudflare Tunnel with permanent URL: `ammahome.brahmaserver.dev`
+- systemd services — auto-start on boot, auto-restart on crash
+- `brahmaserver.dev` domain ready for future projects as subdomains
 
 ### Future Ideas
 - Birthday and special occasion automatic alerts
 - Daily good morning message automation
 - Weather display for Amma's city
 - Photo slideshow during idle time
+- LingoBridge at `lingobridge.brahmaserver.dev`
 
 ---
 
