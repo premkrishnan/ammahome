@@ -22,7 +22,7 @@
 # DEPENDENCIES:
 #   - aiohttp (pip install aiohttp)
 #   - config.py → DISPLAY_SERVER_HOST, PORT, MAX_MEDIA_QUEUE_SIZE,
-#                  TEMP_DIR, DISPLAY_DIR
+#                  TEMP_DIR, DISPLAY_DIR, TOKEN_SECRET
 #   - utils/logger.py
 #   - utils/file_utils.py → make_temp_path
 #
@@ -33,7 +33,7 @@
 #                              display_server.is_ipad_connected()
 #
 # AUTHOR: AmmaHome
-# LAST UPDATED: 2026-05-27
+# LAST UPDATED: 2026-05-31
 # ============================================================
 
 import asyncio
@@ -241,12 +241,13 @@ class DisplayServer:
         Handles a single WebSocket connection from an iPad via aiohttp.
 
         Steps:
-          1. Perform the WebSocket handshake
-          2. Register the new client
-          3. Flush the offline queue to the newly connected iPad
-          4. Loop receiving messages until the connection closes
-          5. Dispatch each incoming message to the right handler
-          6. Deregister the client when the connection drops
+          1. Validate the ?token= query param — return 403 if wrong
+          2. Perform the WebSocket handshake
+          3. Register the new client
+          4. Flush the offline queue to the newly connected iPad
+          5. Loop receiving messages until the connection closes
+          6. Dispatch each incoming message to the right handler
+          7. Deregister the client when the connection drops
 
         Args:
             request (web.Request): The aiohttp HTTP upgrade request.
@@ -257,6 +258,13 @@ class DisplayServer:
         Example:
             # Registered as aiohttp route: app.router.add_get('/ws', ...)
         """
+        token = request.rel_url.query.get("token", "")
+        if token != config.TOKEN_SECRET:
+            logger.warning(
+                f"WebSocket rejected — invalid token from {request.remote}"
+            )
+            return web.Response(text="Forbidden", status=403)
+
         ws = web.WebSocketResponse()
         await ws.prepare(request)
 
@@ -523,18 +531,28 @@ class DisplayServer:
         Serves the display/index.html file for the root URL.
 
         Steps:
-          1. Build the path to display/index.html
-          2. Read and return the HTML content
+          1. Validate the ?token= query param — return 403 if wrong
+          2. Build the path to display/index.html
+          3. Read and return the HTML content
 
         Args:
             request (web.Request): The incoming HTTP request.
 
         Returns:
             web.Response: The index.html content with text/html content type.
+                          web.Response with status=403 if token is wrong.
 
         Example:
-            # GET http://192.168.1.10:8080/ → returns index.html
+            # GET http://192.168.1.10:8080/?token=ammahome2024secure → index.html
+            # GET http://192.168.1.10:8080/ → 403 Forbidden
         """
+        token = request.rel_url.query.get("token", "")
+        if token != config.TOKEN_SECRET:
+            logger.warning(
+                f"HTTP request rejected — invalid token from {request.remote}"
+            )
+            return web.Response(text="Forbidden", status=403)
+
         index_path = config.DISPLAY_DIR / "index.html"
         if not index_path.exists():
             logger.error(f"display/index.html not found at {index_path}")

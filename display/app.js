@@ -41,7 +41,7 @@
 //   - display/index.html (<script src="app.js">)
 //
 // AUTHOR: AmmaHome
-// LAST UPDATED: 2026-05-27 (single-port: ws path /ws, wss on https)
+// LAST UPDATED: 2026-05-31 (token auth: reads ?token= from page URL for WS)
 // ============================================================
 
 'use strict';
@@ -50,8 +50,10 @@
 
 // Use the same host:port the page was loaded from, with wss:// on https.
 // This works on localhost, on the home Wi-Fi, and on Railway (single port).
+// The token is read from the page URL (?token=...) and forwarded to /ws.
 const WS_PROTOCOL = location.protocol === 'https:' ? 'wss:' : 'ws:';
-const WS_URL      = `${WS_PROTOCOL}//${location.host}/ws`;
+const TOKEN       = new URLSearchParams(location.search).get('token') || '';
+const WS_URL      = `${WS_PROTOCOL}//${location.host}/ws?token=${TOKEN}`;
 
 const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const RECONNECT_DELAY_MS    = 3000;

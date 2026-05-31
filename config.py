@@ -20,7 +20,7 @@
 #   - All service files and main.py
 #
 # AUTHOR: AmmaHome
-# LAST UPDATED: 2026-05-27
+# LAST UPDATED: 2026-05-31
 # ============================================================
 
 import json
@@ -70,6 +70,14 @@ TELEGRAM_BOT_TOKEN: str = _require("TELEGRAM_BOT_TOKEN")
 
 # Chat ID of the family Telegram group — negative number for groups
 FAMILY_GROUP_CHAT_ID: int = int(_require("FAMILY_GROUP_CHAT_ID"))
+
+
+# ── Security ─────────────────────────────────────────────────
+
+# Secret token required on all requests to the display server.
+# iPad loads the page as /?token=... and the WebSocket connects to
+# /ws?token=... — requests without a matching token receive HTTP 403.
+TOKEN_SECRET: str = _require("TOKEN_SECRET")
 
 
 # ── Display Server ────────────────────────────────────────────
@@ -165,6 +173,7 @@ def print_config_summary() -> None:
         None
     """
     masked_token = TELEGRAM_BOT_TOKEN[:8] + "..." + TELEGRAM_BOT_TOKEN[-4:]
+    masked_secret = TOKEN_SECRET[:4] + "..." + TOKEN_SECRET[-2:]
 
     print("\n" + "=" * 60)
     print("  AmmaHome — കുടുംബം എപ്പോഴും അടുത്ത്")
@@ -174,6 +183,7 @@ def print_config_summary() -> None:
     print(f"  Family group ID    : {FAMILY_GROUP_CHAT_ID}")
     print(f"  Display server     : http://{DISPLAY_SERVER_HOST}:{PORT}")
     print(f"  WebSocket path     : ws://{DISPLAY_SERVER_HOST}:{PORT}/ws")
+    print(f"  Token secret       : {masked_secret}")
     print(f"  Reminder interval  : every {REMINDER_INTERVAL_SECONDS // 60} minutes")
     print(f"  Heartbeat timeout  : {HEARTBEAT_TIMEOUT_MINUTES} minutes")
     print(f"  TTS language       : {TTS_LANGUAGE} ({TTS_BACKEND})")

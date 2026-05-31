@@ -124,6 +124,7 @@ iPad → Server:
 6. .env is never committed to git
 7. Every .py file has the standard header
 8. Every function has a docstring with Steps/Args/Returns/Example
+9. TOKEN_SECRET must be set in .env — server refuses to start without it
 
 ## Running the Project
 
@@ -155,6 +156,21 @@ Railway cloud deployment. Single combined HTTP + WebSocket server.
 - Tunnel: Cloudflare named tunnel `ammahome` (7173370d-4e60-424f-b331-0861303f148f)
 - Domain: brahmaserver.dev (Cloudflare Registrar)
 - Future projects: *.brahmaserver.dev subdomains
+
+---
+
+## Security — Token Authentication
+
+All display server endpoints are protected by a shared secret token.
+
+- **Config var:** `TOKEN_SECRET` in `.env` and `config.py`
+- **HTTP:** `GET /?token=TOKEN_SECRET` — returns 403 without the correct token
+- **WebSocket:** `ws://<host>/ws?token=TOKEN_SECRET` — returns 403 without the correct token
+- **Static files** (CSS, JS): not token-gated — they contain no secrets and the browser loads them as sub-resources of the protected page
+- **app.js** reads the token from `location.search` (`?token=...`) and appends it to the WebSocket URL automatically — no hardcoding
+- **iPad bookmark/URL:** `https://ammahome.brahmaserver.dev/?token=<TOKEN_SECRET>`
+
+Do **not** log the raw token value — always mask it (see `print_config_summary` in config.py).
 
 ---
 
